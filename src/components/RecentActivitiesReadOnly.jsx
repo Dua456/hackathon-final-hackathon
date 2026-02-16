@@ -21,13 +21,13 @@ const RecentActivitiesReadOnly = ({ editable = false }) => {
   // Load activities from Firestore
   useEffect(() => {
     const q = query(collection(db, 'activities'), orderBy('timestamp', 'desc'));
-    
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const activitiesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setActivities(activitiesData.slice(0, 5)); // Show only the 5 most recent
+      setActivities(activitiesData);
       setLoading(false);
     }, (error) => {
       console.error("Error fetching activities: ", error);
@@ -73,6 +73,17 @@ const RecentActivitiesReadOnly = ({ editable = false }) => {
     return date.toLocaleString();
   };
 
+  const getActivityIcon = (type) => {
+    switch (type) {
+      case 'user': return 'Users';
+      case 'event': return 'Calendar';
+      case 'complaint': return 'AlertTriangle';
+      case 'project': return 'Trophy';
+      case 'message': return 'MessageSquare';
+      default: return 'Calendar';
+    }
+  };
+
   const renderIcon = (iconName) => {
     const props = { className: "h-4 w-4" };
     switch (iconName) {
@@ -106,15 +117,17 @@ const RecentActivitiesReadOnly = ({ editable = false }) => {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    
+
     try {
       await updateDoc(doc(db, 'activities', currentActivity.id), {
         title: formData.title,
         description: formData.description,
         type: formData.type,
-        status: formData.status
+        status: formData.status,
+        icon: getActivityIcon(formData.type), // Make sure icon is updated when type changes
+        updatedAt: new Date() // Add timestamp for when the record was last updated
       });
-      
+
       setShowEditModal(false);
       setCurrentActivity(null);
     } catch (error) {

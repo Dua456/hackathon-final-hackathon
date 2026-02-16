@@ -8,12 +8,15 @@ import {
   Phone,
   User,
   X,
-  Check
+  Check,
+  Edit,
+  Trash2
 } from 'lucide-react';
-import { collection, addDoc, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
+import { notifyNewLostItem, notifyNewFoundItem } from '../utils/notificationService';
 
 const LostAndFound = () => {
   const [activeTab, setActiveTab] = useState('lost');
@@ -115,13 +118,26 @@ const LostAndFound = () => {
 
       const collectionName = activeTab === 'lost' ? 'lostItems' : 'foundItems';
 
-      await addDoc(collection(db, collectionName), {
+      const docRef = await addDoc(collection(db, collectionName), {
         ...formData,
         image: formData.imageUrl, // Use the URL directly
         claimed: false,
         userId: currentUser.uid,
         createdAt: new Date()
       });
+
+      // Create notification for admins
+      try {
+        // In a real app, you would fetch admin user IDs
+        // For now, we'll just use a placeholder
+        if (activeTab === 'lost') {
+          await notifyNewLostItem([currentUser.uid], docRef.id, formData.itemName); // Using current user as placeholder
+        } else {
+          await notifyNewFoundItem([currentUser.uid], docRef.id, formData.itemName); // Using current user as placeholder
+        }
+      } catch (error) {
+        console.error('Error creating notification:', error);
+      }
 
       toast.success(`${activeTab === 'lost' ? 'Lost' : 'Found'} item posted successfully!`);
       setShowModal(false);
@@ -139,7 +155,7 @@ const LostAndFound = () => {
     try {
       const collectionName = activeTab === 'lost' ? 'lostItems' : 'foundItems';
       const itemRef = doc(db, collectionName, itemId);
-      
+
       await updateDoc(itemRef, {
         claimed: true,
         claimedBy: currentUser.uid,
@@ -152,6 +168,98 @@ const LostAndFound = () => {
       console.error('Error claiming item:', error);
       toast.error('Failed to claim item');
     }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    if (window.confirm('Are you sure you want to delete this item?')) {
+      try {
+        const collectionName = activeTab === 'lost' ? 'lostItems' : 'foundItems';
+        await deleteDoc(doc(db, collectionName, itemId));
+        toast.success('Item deleted successfully!');
+        fetchItems(); // Refresh the list
+      } catch (error) {
+        console.error('Error deleting item:', error);
+        toast.error('Failed to delete item');
+      }
+    }
+  };
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    itemName: '',
+    description: '',
+    date: '',
+    location: '',
+    contact: '',
+    category: 'Others',
+    imageUrl: ''
+  });
+
+  const openEditModal = (item) => {
+    setEditFormData({
+      itemName: item.itemName,
+      description: item.description,
+      date: item.date,
+      location: item.location,
+      contact: item.contact || '',
+      category: item.category || 'Others',
+      imageUrl: item.image || item.imageUrl || ''
+    });
+    setCurrentEditItem(item);
+    setShowEditModal(true);
+  };
+
+  const [currentEditItem, setCurrentEditItem] = useState(null);
+
+  const handleEditInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData({ ...editFormData, [name]: value });
+  };
+
+  const handleEditImageUrlChange = (e) => {
+    const url = e.target.value;
+    setEditFormData({ ...editFormData, imageUrl: url });
+  };
+
+  const handleUpdateItem = async (e) => {
+    e.preventDefault();
+
+    if (!editFormData.itemName || !editFormData.description || !editFormData.date || !editFormData.location) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const collectionName = activeTab === 'lost' ? 'lostItems' : 'foundItems';
+      const itemRef = doc(db, collectionName, currentEditItem.id);
+
+      await updateDoc(itemRef, {
+        ...editFormData,
+        image: editFormData.imageUrl, // Use the URL directly
+        updatedAt: new Date()
+      });
+
+      toast.success('Item updated successfully!');
+      setShowEditModal(false);
+      fetchItems(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating item:', error);
+      toast.error('Failed to update item');
+    }
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setCurrentEditItem(null);
+    setEditFormData({
+      itemName: '',
+      description: '',
+      date: '',
+      location: '',
+      contact: '',
+      category: 'Others',
+      imageUrl: ''
+    });
   };
 
   const resetForm = () => {
@@ -198,13 +306,33 @@ const LostAndFound = () => {
               <h3 className="text-lg font-semibold text-gray-900">{item.itemName}</h3>
               <p className="text-gray-600 mt-1">{item.description}</p>
             </div>
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-              item.claimed
-                ? 'bg-green-100 text-green-800'
-                : 'bg-yellow-100 text-yellow-800'
-            }`}>
-              {item.claimed ? 'Claimed' : 'Available'}
-            </span>
+            <div className="flex space-x-2">
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                item.claimed
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                {item.claimed ? 'Claimed' : 'Available'}
+              </span>
+              {item.userId === currentUser.uid && (
+                <div className="flex space-x-1">
+                  <button
+                    onClick={() => openEditModal(item)}
+                    className="text-blue-600 hover:text-blue-800"
+                    title="Edit"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="text-red-600 hover:text-red-800"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -500,6 +628,158 @@ const LostAndFound = () => {
                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
                   >
                     {loading ? 'Posting...' : 'Post Item'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" onClick={closeEditModal}>
+              <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+            </div>
+
+            <div className="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full border border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Edit {activeTab === 'lost' ? 'Lost' : 'Found'} Item
+                  </h3>
+                  <button
+                    onClick={closeEditModal}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleUpdateItem} className="px-6 py-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Item Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="itemName"
+                    value={editFormData.itemName}
+                    onChange={handleEditInputChange}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Enter item name"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description *
+                  </label>
+                  <textarea
+                    name="description"
+                    value={editFormData.description}
+                    onChange={handleEditInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Describe the item"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date *
+                    </label>
+                    <input
+                      type="date"
+                      name="date"
+                      value={editFormData.date}
+                      onChange={handleEditInputChange}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Location *
+                    </label>
+                    <input
+                      type="text"
+                      name="location"
+                      value={editFormData.location}
+                      onChange={handleEditInputChange}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="Where was it lost/found?"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contact Information
+                    </label>
+                    <input
+                      type="text"
+                      name="contact"
+                      value={editFormData.contact}
+                      onChange={handleEditInputChange}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="Phone number or email"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Category
+                    </label>
+                    <select
+                      name="category"
+                      value={editFormData.category}
+                      onChange={handleEditInputChange}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    >
+                      {categories.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Image URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    name="imageUrl"
+                    value={editFormData.imageUrl}
+                    onChange={handleEditImageUrlChange}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="https://example.com/image.jpg"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeEditModal}
+                    className="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Update Item
                   </button>
                 </div>
               </form>

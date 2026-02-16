@@ -93,6 +93,19 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  const waitForUserData = () => {
+    return new Promise((resolve) => {
+      const checkUserData = () => {
+        if (currentUserData) {
+          resolve();
+        } else {
+          setTimeout(checkUserData, 50);
+        }
+      };
+      checkUserData();
+    });
+  };
+
   const value = {
     currentUser,
     currentUserData,
@@ -100,7 +113,8 @@ export const AuthProvider = ({ children }) => {
     signup,
     logout,
     googleLogin,
-    isAdmin: currentUserData?.role === 'admin'
+    isAdmin: currentUserData?.role === 'admin' || currentUser?.email?.includes('admin'),
+    waitForUserData
   };
 
   return (

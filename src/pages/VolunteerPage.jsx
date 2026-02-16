@@ -14,7 +14,7 @@ export default function VolunteerPage() {
     year: '',
     skills: [],
     availability: [],
-    whyVolunteer: ''
+    imageUrl: ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -68,7 +68,7 @@ export default function VolunteerPage() {
         year: '',
         skills: [],
         availability: [],
-        whyVolunteer: ''
+        imageUrl: ''
       });
     } catch (error) {
       toast.error('Failed to submit volunteer registration');
@@ -201,17 +201,17 @@ export default function VolunteerPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Why do you want to volunteer?
+                Profile Image URL
               </label>
-              <textarea
-                name="whyVolunteer"
-                value={formData.whyVolunteer}
+              <input
+                type="url"
+                name="imageUrl"
+                value={formData.imageUrl}
                 onChange={handleInputChange}
-                rows={4}
                 className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Tell us why you want to volunteer and what you hope to contribute..."
-                required
+                placeholder="Enter the URL of your profile image (e.g., https://example.com/image.jpg)"
               />
+              <p className="text-xs text-gray-400 mt-2">Provide a link to your profile picture or any relevant image</p>
             </div>
 
             <button

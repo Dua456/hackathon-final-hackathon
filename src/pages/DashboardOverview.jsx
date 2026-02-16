@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
-import RecentActivitiesReadOnly from '../components/RecentActivitiesReadOnly';
+import RecentActivitiesDashboard from '../components/RecentActivitiesDashboard';
 
 const DashboardOverview = () => {
   const { currentUser, isAdmin } = useAuth();
@@ -23,7 +23,7 @@ const DashboardOverview = () => {
     foundItems: 0,
     volunteers: 0
   });
-  const [recentActivity, setRecentActivity] = useState([]);
+  // Note: Recent activities are now handled by the RecentActivitiesDashboard component
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,22 +35,22 @@ const DashboardOverview = () => {
       // Fetch complaints
       const complaintsSnapshot = await getDocs(collection(db, 'complaints'));
       const complaints = complaintsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+
       // Fetch lost items
       const lostItemsSnapshot = await getDocs(collection(db, 'lostItems'));
       const lostItems = lostItemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+
       // Fetch found items
       const foundItemsSnapshot = await getDocs(collection(db, 'foundItems'));
       const foundItems = foundItemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+
       // Fetch volunteers
       const volunteersSnapshot = await getDocs(collection(db, 'volunteers'));
       const volunteers = volunteersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       // Calculate stats
       const activeComplaints = complaints.filter(complaint => complaint.status !== 'Resolved').length;
-      
+
       setStats({
         totalComplaints: complaints.length,
         activeComplaints,
@@ -59,15 +59,7 @@ const DashboardOverview = () => {
         volunteers: volunteers.length
       });
 
-      // Get recent activity (last 5 items)
-      const allActivities = [
-        ...complaints.map(c => ({ ...c, type: 'complaint', timestamp: c.createdAt })),
-        ...lostItems.map(l => ({ ...l, type: 'lost', timestamp: l.createdAt })),
-        ...foundItems.map(f => ({ ...f, type: 'found', timestamp: f.createdAt })),
-        ...volunteers.map(v => ({ ...v, type: 'volunteer', timestamp: v.createdAt }))
-      ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5);
-
-      setRecentActivity(allActivities);
+      // Recent activities are now handled by the RecentActivitiesDashboard component
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -162,7 +154,7 @@ const DashboardOverview = () => {
           </div>
         </div>
 
-        <RecentActivitiesReadOnly editable={isAdmin} />
+        <RecentActivitiesDashboard />
       </div>
     </div>
   );

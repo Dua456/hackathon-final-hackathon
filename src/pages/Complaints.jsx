@@ -9,12 +9,15 @@ import {
   Flag,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Edit,
+  Trash2
 } from 'lucide-react';
-import { collection, addDoc, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
+import { notifyNewComplaint } from '../utils/notificationService';
 
 const Complaints = () => {
   const [showModal, setShowModal] = useState(false);
@@ -143,13 +146,23 @@ const Complaints = () => {
     try {
       setLoading(true);
 
-      await addDoc(collection(db, 'complaints'), {
+      const docRef = await addDoc(collection(db, 'complaints'), {
         ...formData,
         image: formData.imageUrl, // Use the URL directly
         userId: currentUser.uid,
         status: 'Pending',
         createdAt: new Date()
       });
+
+      // Create notification for admins
+      try {
+        // In a real app, you would fetch admin user IDs
+        // For now, we'll just use a placeholder
+        const adminIds = ['admin']; // This would be fetched from your admin identification system
+        await notifyNewComplaint([currentUser.uid], docRef.id, formData.title); // Using current user as placeholder
+      } catch (error) {
+        console.error('Error creating notification:', error);
+      }
 
       toast.success('Complaint submitted successfully!');
       setShowModal(false);
@@ -169,13 +182,98 @@ const Complaints = () => {
       await updateDoc(complaintRef, {
         status: newStatus
       });
-      
+
       toast.success(`Complaint status updated to ${newStatus}`);
       fetchComplaints(); // Refresh the list
     } catch (error) {
       console.error('Error updating complaint status:', error);
       toast.error('Failed to update complaint status');
     }
+  };
+
+  const handleDeleteComplaint = async (complaintId) => {
+    if (window.confirm('Are you sure you want to delete this complaint?')) {
+      try {
+        await deleteDoc(doc(db, 'complaints', complaintId));
+        toast.success('Complaint deleted successfully!');
+        fetchComplaints(); // Refresh the list
+      } catch (error) {
+        console.error('Error deleting complaint:', error);
+        toast.error('Failed to delete complaint');
+      }
+    }
+  };
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editComplaintData, setEditComplaintData] = useState({
+    title: '',
+    category: 'Others',
+    description: '',
+    location: '',
+    urgency: 'Medium',
+    imageUrl: ''
+  });
+
+  const [currentEditComplaint, setCurrentEditComplaint] = useState(null);
+
+  const openEditComplaintModal = (complaint) => {
+    setEditComplaintData({
+      title: complaint.title,
+      category: complaint.category,
+      description: complaint.description,
+      location: complaint.location,
+      urgency: complaint.urgency,
+      imageUrl: complaint.image || complaint.imageUrl || ''
+    });
+    setCurrentEditComplaint(complaint);
+    setShowEditModal(true);
+  };
+
+  const handleEditComplaintInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditComplaintData({ ...editComplaintData, [name]: value });
+  };
+
+  const handleEditComplaintImageUrlChange = (e) => {
+    const url = e.target.value;
+    setEditComplaintData({ ...editComplaintData, imageUrl: url });
+  };
+
+  const handleUpdateComplaint = async (e) => {
+    e.preventDefault();
+
+    if (!editComplaintData.title || !editComplaintData.description || !editComplaintData.location) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'complaints', currentEditComplaint.id), {
+        ...editComplaintData,
+        image: editComplaintData.imageUrl, // Use the URL directly
+        updatedAt: new Date()
+      });
+
+      toast.success('Complaint updated successfully!');
+      setShowEditModal(false);
+      fetchComplaints(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating complaint:', error);
+      toast.error('Failed to update complaint');
+    }
+  };
+
+  const closeEditComplaintModal = () => {
+    setShowEditModal(false);
+    setCurrentEditComplaint(null);
+    setEditComplaintData({
+      title: '',
+      category: 'Others',
+      description: '',
+      location: '',
+      urgency: 'Medium',
+      imageUrl: ''
+    });
   };
 
   const resetForm = () => {
@@ -273,6 +371,25 @@ const Complaints = () => {
                     {status.value}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {complaint.userId === currentUser.uid && (
+              <div className="mt-4 flex space-x-2">
+                <button
+                  onClick={() => openEditComplaintModal(complaint)}
+                  className="text-blue-600 hover:text-blue-800"
+                  title="Edit"
+                >
+                  <Edit className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteComplaint(complaint.id)}
+                  className="text-red-600 hover:text-red-800"
+                  title="Delete"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             )}
           </div>
@@ -541,6 +658,146 @@ const Complaints = () => {
                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
                   >
                     {loading ? 'Submitting...' : 'Submit Complaint'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Complaint Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" onClick={closeEditComplaintModal}>
+              <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+            </div>
+
+            <div className="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full border border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Edit Complaint
+                  </h3>
+                  <button
+                    onClick={closeEditComplaintModal}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleUpdateComplaint} className="px-6 py-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Title *
+                  </label>
+                  <input
+                    type="text"
+                    name="title"
+                    value={editComplaintData.title}
+                    onChange={handleEditComplaintInputChange}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Enter complaint title"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Category *
+                    </label>
+                    <select
+                      name="category"
+                      value={editComplaintData.category}
+                      onChange={handleEditComplaintInputChange}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      required
+                    >
+                      {categories.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Urgency *
+                    </label>
+                    <select
+                      name="urgency"
+                      value={editComplaintData.urgency}
+                      onChange={handleEditComplaintInputChange}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      required
+                    >
+                      {urgencies.map(urgency => (
+                        <option key={urgency.value} value={urgency.value}>{urgency.value}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description *
+                  </label>
+                  <textarea
+                    name="description"
+                    value={editComplaintData.description}
+                    onChange={handleEditComplaintInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Describe your complaint in detail"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Location *
+                  </label>
+                  <input
+                    type="text"
+                    name="location"
+                    value={editComplaintData.location}
+                    onChange={handleEditComplaintInputChange}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Where is the issue located?"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Image URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    name="imageUrl"
+                    value={editComplaintData.imageUrl}
+                    onChange={handleEditComplaintImageUrlChange}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="https://example.com/image.jpg"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeEditComplaintModal}
+                    className="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Update Complaint
                   </button>
                 </div>
               </form>

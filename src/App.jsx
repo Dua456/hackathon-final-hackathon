@@ -16,6 +16,9 @@ import AdminUsers from './pages/AdminUsers';
 import AdminEvents from './pages/AdminEvents';
 import AdminComplaints from './pages/AdminComplaints';
 import AdminActivities from './pages/AdminActivities';
+import AdminLostFound from './pages/AdminLostFound';
+import AdminVolunteers from './pages/AdminVolunteers';
+import AdminSettings from './pages/AdminSettings';
 import AdminLoginPage from './pages/AdminLoginPage';
 import ProtectedAdminRoute from './components/ProtectedAdminRoute';
 
@@ -49,7 +52,9 @@ function App() {
               <Route path="users" element={<AdminUsers />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="complaints" element={<AdminComplaints />} />
-              <Route path="activities" element={<AdminActivities />} />
+              <Route path="lost-found" element={<AdminLostFound />} />
+              <Route path="volunteers" element={<AdminVolunteers />} />
+              <Route path="settings" element={<AdminSettings />} />
             </Route>
           </Routes>
         </div>

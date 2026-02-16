@@ -14,6 +14,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
+import { notifyNewVolunteer } from '../utils/notificationService';
 
 const Volunteer = () => {
   const [showModal, setShowModal] = useState(false);
@@ -25,7 +26,7 @@ const Volunteer = () => {
     year: '',
     skills: [],
     availability: [],
-    reason: ''
+    imageUrl: ''
   });
 
   const { currentUser } = useAuth();
@@ -79,7 +80,7 @@ const Volunteer = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.rollNumber || !formData.department || !formData.year || !formData.reason) {
+    if (!formData.name || !formData.rollNumber || !formData.department || !formData.year) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -97,11 +98,21 @@ const Volunteer = () => {
     try {
       setLoading(true);
       
-      await addDoc(collection(db, 'volunteers'), {
+      const docRef = await addDoc(collection(db, 'volunteers'), {
         ...formData,
+        image: formData.imageUrl, // Store the image URL as 'image' field
         userId: currentUser.uid,
         createdAt: new Date()
       });
+
+      // Create notification for admins
+      try {
+        // In a real app, you would fetch admin user IDs
+        // For now, we'll just use a placeholder
+        await notifyNewVolunteer([currentUser.uid], docRef.id, formData.name); // Using current user as placeholder
+      } catch (error) {
+        console.error('Error creating notification:', error);
+      }
 
       toast.success('Volunteer registration submitted successfully!');
       setShowModal(false);
@@ -122,7 +133,7 @@ const Volunteer = () => {
       year: '',
       skills: [],
       availability: [],
-      reason: ''
+      imageUrl: ''
     });
   };
 
@@ -369,20 +380,20 @@ const Volunteer = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Why do you want to volunteer? *
+                    Profile Image URL (Optional)
                   </label>
                   <div className="relative">
-                    <MessageSquare className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <textarea
-                      name="reason"
-                      value={formData.reason}
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="url"
+                      name="imageUrl"
+                      value={formData.imageUrl}
                       onChange={handleInputChange}
-                      rows={4}
                       className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                      placeholder="Tell us why you want to volunteer and what you hope to contribute..."
-                      required
+                      placeholder="https://example.com/image.jpg"
                     />
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">Provide a link to your profile picture or any relevant image</p>
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">

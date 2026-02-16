@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Calendar, Users, MapPin, Clock, Edit, Trash2, Eye, Tag, Filter } from 'lucide-react';
+import { collection, getDocs, updateDoc, deleteDoc, doc, orderBy, query, addDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const AdminEvents = () => {
   const [events, setEvents] = useState([]);
@@ -11,79 +13,54 @@ const AdminEvents = () => {
   const [maxParticipants, setMaxParticipants] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [currentEvent, setCurrentEvent] = useState(null);
+  const [eventForm, setEventForm] = useState({
+    title: '',
+    description: '',
+    startDate: '',
+    endDate: '',
+    location: '',
+    category: '',
+    status: 'upcoming',
+    imageUrl: ''
+  });
 
-  // Mock event data - in a real app, this would come from your backend/Firebase
+  const categories = ['all', 'Technology', 'Environment', 'Healthcare', 'Finance', 'Social'];
+
+  // Fetch real event data from Firebase
   useEffect(() => {
-    const mockEvents = [
-      {
-        id: 1,
-        title: 'Tech Innovation Hackathon 2024',
-        description: 'Annual tech innovation hackathon focusing on AI and blockchain solutions',
-        startDate: '2024-03-15',
-        endDate: '2024-03-17',
-        location: 'Main Campus Auditorium',
-        status: 'upcoming',
-        participants: 120,
-        organizers: ['John Doe', 'Jane Smith'],
-        category: 'Technology',
-        imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60'
-      },
-      {
-        id: 2,
-        title: 'Green Energy Solutions Challenge',
-        description: 'Develop sustainable energy solutions for urban environments',
-        startDate: '2024-02-20',
-        endDate: '2024-02-22',
-        location: 'Engineering Building',
-        status: 'ongoing',
-        participants: 85,
-        organizers: ['Mike Johnson', 'Sarah Williams'],
-        category: 'Environment',
-        imageUrl: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60'
-      },
-      {
-        id: 3,
-        title: 'Healthcare Tech Hackathon',
-        description: 'Innovative healthcare technology solutions',
-        startDate: '2024-01-10',
-        endDate: '2024-01-12',
-        location: 'Medical Center',
-        status: 'completed',
-        participants: 95,
-        organizers: ['David Brown', 'Lisa Davis'],
-        category: 'Healthcare',
-        imageUrl: 'https://images.unsplash.com/photo-1551601659-4c83b7b0c3ac?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60'
-      },
-      {
-        id: 4,
-        title: 'FinTech Startup Weekend',
-        description: 'Build financial technology solutions in 48 hours',
-        startDate: '2024-04-05',
-        endDate: '2024-04-07',
-        location: 'Business School',
-        status: 'upcoming',
-        participants: 75,
-        organizers: ['Tom Wilson', 'Amy Taylor'],
-        category: 'Finance',
-        imageUrl: 'https://images.unsplash.com/photo-1553877522-43269d4ea984?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60'
-      },
-      {
-        id: 5,
-        title: 'Social Impact Hackathon',
-        description: 'Technology solutions for social good',
-        startDate: '2023-12-15',
-        endDate: '2023-12-17',
-        location: 'Community Center',
-        status: 'completed',
-        participants: 110,
-        organizers: ['John Doe', 'Sarah Williams'],
-        category: 'Social',
-        imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60'
-      },
-    ];
-    
-    setEvents(mockEvents);
-    setFilteredEvents(mockEvents);
+    const fetchEvents = async () => {
+      try {
+        const eventsQuery = query(collection(db, 'events'), orderBy('startDate', 'asc'));
+        const eventsSnapshot = await getDocs(eventsQuery);
+        
+        const eventsList = eventsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data.title || 'Untitled Event',
+            description: data.description || 'No description provided',
+            startDate: data.startDate ? (typeof data.startDate.toDate === 'function' ? data.startDate.toDate().toISOString().split('T')[0] : data.startDate) : new Date().toISOString().split('T')[0],
+            endDate: data.endDate ? (typeof data.endDate.toDate === 'function' ? data.endDate.toDate().toISOString().split('T')[0] : data.endDate) : new Date().toISOString().split('T')[0],
+            location: data.location || 'TBD',
+            status: data.status || 'upcoming',
+            participants: data.participantsCount || 0,
+            organizers: data.organizers || [],
+            category: data.category || 'General',
+            imageUrl: data.imageUrl || ''
+          };
+        });
+
+        setEvents(eventsList);
+        setFilteredEvents(eventsList);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+        // Fallback to empty array if there's an error
+        setEvents([]);
+        setFilteredEvents([]);
+      }
+    };
+
+    fetchEvents();
   }, []);
 
   // Filter events based on search term and selected status
@@ -117,16 +94,46 @@ const AdminEvents = () => {
     setFilteredEvents(filtered);
   }, [searchTerm, selectedStatus, selectedCategory, minParticipants, maxParticipants, events]);
 
-  const handleDeleteEvent = (eventId) => {
+  const handleDeleteEvent = async (eventId) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
-      setEvents(events.filter(event => event.id !== eventId));
+      try {
+        await deleteDoc(doc(db, 'events', eventId));
+        // Refresh the events list
+        const eventsSnapshot = await getDocs(query(collection(db, 'events'), orderBy('startDate', 'asc')));
+        const eventsList = eventsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data.title || 'Untitled Event',
+            description: data.description || 'No description provided',
+            startDate: data.startDate ? (typeof data.startDate.toDate === 'function' ? data.startDate.toDate().toISOString().split('T')[0] : data.startDate) : new Date().toISOString().split('T')[0],
+            endDate: data.endDate ? (typeof data.endDate.toDate === 'function' ? data.endDate.toDate().toISOString().split('T')[0] : data.endDate) : new Date().toISOString().split('T')[0],
+            location: data.location || 'TBD',
+            status: data.status || 'upcoming',
+            participants: data.participantsCount || 0,
+            organizers: data.organizers || [],
+            category: data.category || 'General',
+            imageUrl: data.imageUrl || ''
+          };
+        });
+        setEvents(eventsList);
+        setFilteredEvents(eventsList);
+      } catch (error) {
+        console.error('Error deleting event:', error);
+      }
     }
   };
 
-  const updateEventStatus = (eventId, newStatus) => {
-    setEvents(events.map(event => 
-      event.id === eventId ? { ...event, status: newStatus } : event
-    ));
+  const updateEventStatus = async (eventId, newStatus) => {
+    try {
+      await updateDoc(doc(db, 'events', eventId), { status: newStatus });
+      // Update local state
+      setEvents(events.map(event =>
+        event.id === eventId ? { ...event, status: newStatus } : event
+      ));
+    } catch (error) {
+      console.error('Error updating event status:', error);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -143,12 +150,129 @@ const AdminEvents = () => {
 
   const openEditModal = (event) => {
     setCurrentEvent(event);
+    // Ensure dates are in the proper format for date inputs (YYYY-MM-DD)
+    const formattedStartDate = event.startDate instanceof Date 
+      ? event.startDate.toISOString().split('T')[0] 
+      : event.startDate;
+    const formattedEndDate = event.endDate instanceof Date 
+      ? event.endDate.toISOString().split('T')[0] 
+      : event.endDate;
+      
+    setEventForm({
+      title: event.title,
+      description: event.description,
+      startDate: formattedStartDate,
+      endDate: formattedEndDate,
+      location: event.location,
+      category: event.category,
+      status: event.status,
+      imageUrl: event.imageUrl
+    });
     setShowModal(true);
+  };
+
+  const handleEventFormChange = (e) => {
+    const { name, value } = e.target;
+    setEventForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const closeModal = () => {
     setShowModal(false);
     setCurrentEvent(null);
+    setEventForm({
+      title: '',
+      description: '',
+      startDate: '',
+      endDate: '',
+      location: '',
+      category: '',
+      status: 'upcoming',
+      imageUrl: ''
+    });
+  };
+
+  const handleSaveEvent = async (e) => {
+    e.preventDefault();
+
+    if (!eventForm.title || !eventForm.startDate || !eventForm.endDate) {
+      alert('Title, start date, and end date are required');
+      return;
+    }
+
+    try {
+      // Convert date strings to Date objects for Firestore
+      const startDateObj = eventForm.startDate ? new Date(eventForm.startDate) : new Date();
+      const endDateObj = eventForm.endDate ? new Date(eventForm.endDate) : new Date();
+
+      if (currentEvent) {
+        // Update existing event
+        await updateDoc(doc(db, 'events', currentEvent.id), {
+          title: eventForm.title,
+          description: eventForm.description,
+          startDate: startDateObj,
+          endDate: endDateObj,
+          location: eventForm.location,
+          category: eventForm.category,
+          status: eventForm.status,
+          imageUrl: eventForm.imageUrl
+        });
+      } else {
+        // Create new event
+        await addDoc(collection(db, 'events'), {
+          title: eventForm.title,
+          description: eventForm.description,
+          startDate: startDateObj,
+          endDate: endDateObj,
+          location: eventForm.location,
+          category: eventForm.category,
+          status: eventForm.status,
+          imageUrl: eventForm.imageUrl,
+          createdAt: new Date(),
+          participantsCount: 0
+        });
+      }
+
+      // Close modal and refresh events
+      setShowModal(false);
+      setEventForm({
+        title: '',
+        description: '',
+        startDate: '',
+        endDate: '',
+        location: '',
+        category: '',
+        status: 'upcoming',
+        imageUrl: ''
+      });
+      setCurrentEvent(null);
+      
+      // Refresh the events list
+      const eventsSnapshot = await getDocs(query(collection(db, 'events'), orderBy('startDate', 'asc')));
+      const eventsList = eventsSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title || 'Untitled Event',
+          description: data.description || 'No description provided',
+          startDate: data.startDate ? (typeof data.startDate.toDate === 'function' ? data.startDate.toDate().toISOString().split('T')[0] : data.startDate) : new Date().toISOString().split('T')[0],
+          endDate: data.endDate ? (typeof data.endDate.toDate === 'function' ? data.endDate.toDate().toISOString().split('T')[0] : data.endDate) : new Date().toISOString().split('T')[0],
+          location: data.location || 'TBD',
+          status: data.status || 'upcoming',
+          participants: data.participantsCount || 0,
+          organizers: data.organizers || [],
+          category: data.category || 'General',
+          imageUrl: data.imageUrl || ''
+        };
+      });
+      setEvents(eventsList);
+      setFilteredEvents(eventsList);
+    } catch (error) {
+      console.error('Error saving event:', error);
+      alert('Error saving event: ' + error.message);
+    }
   };
 
   return (
@@ -356,63 +480,75 @@ const AdminEvents = () => {
                 {currentEvent ? 'Edit Event' : 'Create New Event'}
               </h2>
               
-              <form className="space-y-4">
+              <form onSubmit={handleSaveEvent} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Event Title</label>
                   <input
                     type="text"
+                    name="title"
+                    value={eventForm.title}
+                    onChange={handleEventFormChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    defaultValue={currentEvent?.title || ''}
                     placeholder="Enter event title"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                   <textarea
+                    name="description"
+                    value={eventForm.description}
+                    onChange={handleEventFormChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="3"
-                    defaultValue={currentEvent?.description || ''}
                     placeholder="Enter event description"
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                     <input
                       type="date"
+                      name="startDate"
+                      value={eventForm.startDate}
+                      onChange={handleEventFormChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      defaultValue={currentEvent?.startDate || ''}
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
                     <input
                       type="date"
+                      name="endDate"
+                      value={eventForm.endDate}
+                      onChange={handleEventFormChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      defaultValue={currentEvent?.endDate || ''}
                     />
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                   <input
                     type="text"
+                    name="location"
+                    value={eventForm.location}
+                    onChange={handleEventFormChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    defaultValue={currentEvent?.location || ''}
                     placeholder="Enter event location"
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                     <select
+                      name="category"
+                      value={eventForm.category}
+                      onChange={handleEventFormChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      defaultValue={currentEvent?.category || ''}
                     >
                       <option value="">Select category</option>
                       <option value="Technology">Technology</option>
@@ -426,8 +562,10 @@ const AdminEvents = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
+                      name="status"
+                      value={eventForm.status}
+                      onChange={handleEventFormChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      defaultValue={currentEvent?.status || 'upcoming'}
                     >
                       <option value="upcoming">Upcoming</option>
                       <option value="ongoing">Ongoing</option>
@@ -441,12 +579,14 @@ const AdminEvents = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Event Image URL (Optional)</label>
                   <input
                     type="url"
+                    name="imageUrl"
+                    value={eventForm.imageUrl}
+                    onChange={handleEventFormChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    defaultValue={currentEvent?.imageUrl || ''}
                     placeholder="https://example.com/event-image.jpg"
                   />
                 </div>
-                
+
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
