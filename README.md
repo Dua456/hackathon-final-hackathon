@@ -60,17 +60,7 @@ To access the admin dashboard:
 
 The app uses the following Firebase configuration:
 
-```javascript
-const firebaseConfig = {
-  apiKey: "AIzaSyAZm0KFtIfp82G6ZUnf4TC_5q_2S0Acb-g",
-  authDomain: "hackathon-dashboard-e5d9c.firebaseapp.com",
-  projectId: "hackathon-dashboard-e5d9c",
-  storageBucket: "hackathon-dashboard-e5d9c.firebasestorage.app",
-  messagingSenderId: "431732155787",
-  appId: "1:431732155787:web:0cfc3cca310b1c3bdc3b8e",
-  measurementId: "G-R8X0037D2L"
-};
-```
+
 
 ## Folder Structure
 
